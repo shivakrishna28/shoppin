@@ -1,0 +1,64 @@
+import requests
+from bs4 import BeautifulSoup
+import re
+from urllib.parse import urljoin, urlparse
+
+PRODUCT_PATTERNS = [r'/product/', r'/item/', r'/p/']
+
+# Headers for HTTP requests
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"
+}
+
+REQUEST_TIMEOUT = 5  
+
+MAX_URLS = 100
+
+def is_product_url(url):
+    return any(re.search(pattern, url) for pattern in PRODUCT_PATTERNS)
+
+def fetch_page(url):
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        if response.status_code == 200:
+            return BeautifulSoup(response.text, 'html.parser')
+    except requests.RequestException as e:
+        print(f"Error fetching {url}: {e}")
+    return None
+
+def crawl_domain(domain, max_depth=3):
+    visited = set()
+    product_urls = set()
+    to_visit = [domain]
+    domain_parsed = urlparse(domain).netloc
+
+    for depth in range(max_depth):
+        next_to_visit = []
+        for url in to_visit[:MAX_URLS]:
+            if url in visited:
+                continue
+            visited.add(url)
+            print(f"Crawling: {url}")
+
+            soup = fetch_page(url)
+            if soup:
+                for link in soup.find_all('a', href=True):
+                    full_url = urljoin(domain, link['href'])
+                    parsed_url = urlparse(full_url)
+
+                    
+                    if parsed_url.netloc != domain_parsed or full_url in visited:
+                        continue
+
+                    
+                    if is_product_url(full_url):
+                        product_urls.add(full_url)
+                    else:
+                        next_to_visit.append(full_url)
+
+        to_visit = next_to_visit
+
+        if not to_visit:
+            break
+
+    return list(product_urls)
